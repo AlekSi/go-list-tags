@@ -18,6 +18,29 @@ func main() {
 	log.SetPrefix("go-list-tags: ")
 	flag.Parse()
 
+	cmd := exec.Command("go", "tool", "dist", "list")
+	cmd.Stderr = os.Stderr
+	b, err := cmd.Output()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	allGOOS := make(map[string]struct{})
+	allGOARCH := make(map[string]struct{})
+	for _, pair := range strings.Split(strings.TrimSpace(string(b)), "\n") {
+		parts := strings.Split(pair, "/")
+		if len(parts) != 2 {
+			log.Fatal(parts)
+		}
+		allGOOS[parts[0]] = struct{}{}
+		allGOARCH[parts[1]] = struct{}{}
+	}
+
+	allRelease := make(map[string]struct{})
+	for _, tag := range build.Default.ReleaseTags {
+		allRelease[tag] = struct{}{}
+	}
+
 	args := flag.Args()
 	if len(args) == 0 {
 		log.Printf("Empty list of packages, assuming `all`.")
@@ -27,9 +50,9 @@ func main() {
 	// make package list
 	packagesM := make(map[string]struct{})
 	for _, arg := range args {
-		cmd := exec.Command("go", "list", "-e", "-find", arg)
+		cmd = exec.Command("go", "list", "-e", "-find", arg)
 		cmd.Stderr = os.Stderr
-		b, err := cmd.Output()
+		b, err = cmd.Output()
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -105,6 +128,36 @@ func main() {
 	sort.Strings(tags)
 
 	fmt.Println("All tags: ", tags)
+
+	var goos, goarch, release, other []string
+	for _, tag := range tags {
+		if _, ok := allGOOS[tag]; ok {
+			goos = append(goos, tag)
+			continue
+		}
+
+		if _, ok := allGOARCH[tag]; ok {
+			goarch = append(goarch, tag)
+			continue
+		}
+
+		if _, ok := allRelease[tag]; ok {
+			release = append(release, tag)
+			continue
+		}
+
+		other = append(other, tag)
+	}
+
+	sort.Strings(goos)
+	sort.Strings(goarch)
+	sort.Strings(other)
+
+	fmt.Println("GOOS tags: ", goos)
+	fmt.Println("GOARCH tags: ", goarch)
+	fmt.Println("Release tags: ", release)
+	fmt.Println("Other tags: ", other)
+
 	for _, tag := range tags {
 		fmt.Printf("%s:\n", tag)
 		s := tagsM[tag]
